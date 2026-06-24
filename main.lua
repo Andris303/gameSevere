@@ -249,7 +249,7 @@ RunService.PostLocal:Connect(function()
         Texts["FavRoom"].Text = FavRoom
     end
 
-    if workspace.Handprints:FindFirstChildOfClass("BasePart") then
+    if workspace.Handprints:FindFirstChildOfClass("Part") then
         if not UVEvidence then
             UVEvidence = true
             send_notification("UV Handprints evidence found", "warning")
