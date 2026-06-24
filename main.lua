@@ -14,6 +14,8 @@ local LocalPlayer = Players.LocalPlayer
 local UVEvidence = false
 local WriteEvidence = false
 local FreezeEvidence = false
+local LaserEvidence = false
+local Hunting = false
 
 local Offset = 0
 local YVal = 0
@@ -231,11 +233,19 @@ local FavRoom = "Ghost's favorite room: " .. FavRoomRaw
 AddText("FavRoom", FavRoom, Color3.fromRGB(16, 167, 234))
 local FavRoomInst = workspace.Map.Rooms:FindFirstChild(FavRoomRaw)
 
+if workspace.Ghost:GetAttribute("Hunting") == "true" then
+    Hunting = true
+    AddText("Hunt", "Ghost is currently hunting", Color3.fromRGB(196, 45, 32))
+else
+    Hunting = false
+    AddText("Hunt", "Ghost is not hunting", Color3.fromRGB(16, 167, 234))
+end
+
 if workspace:FindFirstChild("GhostOrb") then
     send_notification("Ghost Orb evidence found", "warning")
     AddText("OrbEvidence", "Ghost orb evidence found", Color3.fromRGB(32, 196, 93))
 else
-    AddText("OrbEvidence", "No ghost orb evidence, can be ruled out", Color3.fromRGB(32, 196, 93))
+    AddText("OrbEvidence", "No ghost orb evidence, can be ruled out", Color3.fromRGB(228, 217, 211))
 end
 
 RunService.Render:Connect(Render)
@@ -249,20 +259,34 @@ RunService.PostLocal:Connect(function()
         Texts["FavRoom"].Text = FavRoom
     end
 
-    if workspace.Handprints:FindFirstChildOfClass("Part") then
-        if not UVEvidence then
-            UVEvidence = true
-            send_notification("UV Handprints evidence found", "warning")
-            AddText("UVEvidence", "UV Handprints evidence found", Color3.fromRGB(32, 196, 93))
-        end
+    if workspace.Ghost:GetAttribute("Hunting") == "true" and not Hunting then
+        Hunting = true
+        send_notification("Ghost started hunting", "error")
+        Texts["Hunt"].Text = "Ghost is currently hunting"
+        Texts["Hunt"].Color = Color3.fromRGB(196, 45, 32)
+    elseif workspace.Ghost:GetAttribute("Hunting") == "false" and Hunting then
+        Hunting = false
+        send_notification("Ghost stopped hunting", "info")
+        Texts["Hunt"].Text = "Ghost is not hunting"
+        Texts["Hunt"].Color = Color3.fromRGB(16, 167, 234)
     end
 
-    if workspace.ScratchText:FindFirstChildOfClass("Model") then
-        if not WriteEvidence then
-            WriteEvidence = true
-            send_notification("Inscription evidence found", "warning")
-            AddText("WriteEvidence", "Inscription evidence found", Color3.fromRGB(32, 196, 93))
-        end
+    if workspace.Handprints:FindFirstChildOfClass("Part") and not UVEvidence then
+        UVEvidence = true
+        send_notification("UV Handprints evidence found", "warning")
+        AddText("UVEvidence", "UV Handprints evidence found", Color3.fromRGB(32, 196, 93))
+    end
+
+    if workspace.ScratchText:FindFirstChildOfClass("Model") and not WriteEvidence then
+        WriteEvidence = true
+        send_notification("Inscription evidence found", "warning")
+        AddText("WriteEvidence", "Inscription evidence found", Color3.fromRGB(32, 196, 93))
+    end
+
+    if workspace.Ghost:GetAttribute("LaserVisible") == "true" and not LaserEvidence then
+        LaserEvidence = true
+        send_notification("Laser projector evidence found", "warning")
+        AddText("LaserEvidence", "Laser projector evidence found", Color3.fromRGB(32, 196, 93))
     end
 
     if tonumber(FavRoomInst:GetAttribute("Temperature")) < 0 then
