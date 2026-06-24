@@ -221,12 +221,24 @@ local function Highlight(inst, color)
 end
 
 local function Render()
-    for i, inst in pairs(BodyParts) do
-        if workspace.Ghost:FindFirstChild(inst) then
-            Highlight(workspace.Ghost[inst], Color3.fromRGB(196, 45, 32))
+    if _G.GhostESP then
+        for i, inst in pairs(BodyParts) do
+            if workspace.Ghost:FindFirstChild(inst) then
+                Highlight(workspace.Ghost[inst], Color3.fromRGB(196, 45, 32))
+            end
+        end
+    end
+
+    if _G.UVESP then
+        for i, inst in pairs(workspace.Handprints:GetChildren()) do
+            Highlight(inst, Color3.fromRGB(177, 45, 146))
         end
     end
 end
+
+local Energy = tonumber(LocalPlayer:GetAttribute("Energy"))
+local EnergyText = "Your energy: " .. tostring(Energy)
+AddText("Energy", EnergyText, Color3.fromRGB(228, 217, 211))
 
 local FavRoomRaw = workspace.Ghost:GetAttribute("FavoriteRoom")
 local FavRoom = "Ghost's favorite room: " .. FavRoomRaw
@@ -251,6 +263,23 @@ end
 RunService.Render:Connect(Render)
 
 RunService.PostLocal:Connect(function()
+    if tonumber(LocalPlayer:GetAttribute("Energy")) ~= Energy then
+        Energy = tonumber(LocalPlayer:GetAttribute("Energy"))
+        EnergyText = "Your energy: " .. tostring(Energy)
+        Texts["Energy"].Text = EnergyText
+        if Energy == 0 then
+            Texts["Energy"].Color = Color3.fromRGB(196, 45, 32)
+        elseif Energy < 20 then
+            if Texts["Energy"].Color ~= Color3.fromRGB(234, 165, 16) then
+                Texts["Energy"].Color = Color3.fromRGB(234, 165, 16)
+            end
+        end
+    end
+
+    if _G.InfStamina then
+        LocalPlayer:SetAttribute("Stamina", 100)
+    end
+
     if workspace.Ghost:GetAttribute("FavoriteRoom") ~= FavRoomRaw then
         send_notification("Ghost\'s favorite room changed", "warning")
         FavRoomRaw = workspace.Ghost:GetAttribute("FavoriteRoom")
