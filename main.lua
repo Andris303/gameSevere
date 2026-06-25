@@ -221,17 +221,17 @@ local function Highlight(inst, color)
 end
 
 local function Render()
-    if _G.GhostESP then
+    if _G.Ghost_ESP then
         for i, inst in pairs(BodyParts) do
             if workspace.Ghost:FindFirstChild(inst) then
-                Highlight(workspace.Ghost[inst], Color3.fromRGB(196, 45, 32))
+                Highlight(workspace.Ghost[inst], _G.Ghost_ESP_Color)
             end
         end
     end
 
-    if _G.UVESP then
+    if _G.UV_ESP then
         for i, inst in pairs(workspace.Handprints:GetChildren()) do
-            Highlight(inst, Color3.fromRGB(177, 45, 146))
+            Highlight(inst, _G.UV_ESP_Color)
         end
     end
 end
@@ -251,6 +251,10 @@ if workspace.Ghost:GetAttribute("Hunting") == "true" then
 else
     Hunting = false
     AddText("Hunt", "Ghost is not hunting", Color3.fromRGB(16, 167, 234))
+end
+
+if workspace.Ghost:GetAttribute("Gender") == "Male" then
+    AddText("Gender", "Keres and Siren can be ruled out", Color3.fromRGB(228, 217, 211))
 end
 
 if workspace:FindFirstChild("GhostOrb") then
@@ -276,7 +280,7 @@ RunService.PostLocal:Connect(function()
         end
     end
 
-    if _G.InfStamina then
+    if _G.Inf_Stamina then
         LocalPlayer:SetAttribute("Stamina", 100)
     end
 
