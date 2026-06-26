@@ -31,6 +31,7 @@ local Evidence = {
     Laser = false,
     Wither = false,
     TypeSiren = false,
+    TypeBanshee = false
 }
 
 local SpiritBoxResponses = {
@@ -360,7 +361,6 @@ local function Main()
     local FavRoomAttribute = Ghost:GetAttribute("FavoriteRoom")
     local HuntingAttribute = Ghost:GetAttribute("Hunting") == "true"
     local LaserAttribute = Ghost:GetAttribute("LaserVisible") == "true"
-    local Temperature = tonumber(FavRoomInst:GetAttribute("Temperature"))
     local HandprintInst = workspace.Handprints:FindFirstChildOfClass("Part")
     local InscriptInst = workspace.ScratchText:FindFirstChildOfClass("Model")
     local Subtitle = LocalPlayer.PlayerGui.Subtitles.Holder.TextLabel
@@ -374,7 +374,7 @@ local function Main()
             elseif GhostSpeedColorBool then
                 Texts["GhostSpeed"].Color = Colors.Orange
             end
-            GhostSpeedText = "Ghost\'s speed: " .. tostring(GhostSpeed)
+            GhostSpeedText = "Ghost\'s speed: " .. tostring(math.floor(GhostSpeed * 100) / 100)
             Texts["GhostSpeed"].Text = GhostSpeedText
         end
         LocalSpeed = memory.readf32(LocalPlayer.Character.Humanoid, tonumber(_G.WalkspeedOffset, 16))
@@ -382,16 +382,24 @@ local function Main()
 
     if TextLabelBool then
         local SubtitleText = memory.readstring(Subtitle, tonumber(_G.TextLabelTextOffset, 16))
-        if SubtitleText == "- HUMMING -" and not Evidence.TypeSiren then
+        if SubtitleText == "- HUMMING -" then
             if not Evidence.SpiritBox then
                 Evidence.SpiritBox = true
                 send_notification("Spirit box evidence found", "warning")
                 AddText("SpiritBoxEvidence", "Spirit box evidence found", Colors.Green)
             end
             
-            Evidence.TypeSiren = true
-            send_notification("Ghost type found: Siren", "warning")
-            AddText("SirenType", "Ghost type found: Siren", Colors.Red)
+            if not Evidence.TypeSiren then
+                Evidence.TypeSiren = true
+                send_notification("Ghost type found: Siren", "warning")
+                AddText("SirenType", "Ghost type found: Siren", Colors.Red)
+            end
+        end
+
+        if SubtitleText == "> Ghost Wail <" and GhostHunting and not Evidence.TypeBanshee then
+            Evidence.TypeBanshee = true
+            send_notification("Ghost type found: Banshee", "warning")
+            AddText("SirenType", "Ghost type found: Banshee", Colors.Red)
         end
 
         for i, inst in pairs(SpiritBoxResponses) do
@@ -458,10 +466,13 @@ local function Main()
         AddText("LaserEvidence", "Laser projector evidence found", Colors.Green)
     end
 
-    if Temperature < 0 and not Evidence.Freeze then
-        Evidence.Freeze = true
-        send_notification("Freezing temperature evidence found", "warning")
-        AddText("FreezeEvidence", "Freezing temperature evidence found", Colors.Green)
+    for i, inst in pairs(Rooms:GetChildren()) do
+        RoomTemp = tonumber(inst:GetAttribute("Temperature"))
+        if RoomTemp < 0 and not Evidence.Freeze then
+            Evidence.Freeze = true
+            send_notification("Freezing temperatures evidence found", "warning")
+            AddText("FreezeEvidence", "Freezing temperatures evidence found", Colors.Green)
+        end
     end
 
     for i, inst in pairs(workspace.Items:GetChildren()) do
