@@ -1,24 +1,60 @@
 --!strict
 --!optimize 2
 
-if game.GameId ~= 6170143659 then
-    print("wrong game")
-    return
-end
+if game.GameId == 6170143659 and workspace:FindFirstChild("Ghost") then
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
+local Ghost = workspace.Ghost
+local Rooms = workspace.Map.Rooms
+local ScriptRestart = false
 
-local UVEvidence = false
-local WriteEvidence = false
-local FreezeEvidence = false
-local LaserEvidence = false
-local Hunting = false
+-- 5, 10, 16
 
-local Offset = 0
-local YVal = 0
+local Colors = {
+    Green = Color3.fromRGB(32, 196, 93),
+    Red = Color3.fromRGB(196, 45, 32),
+    Orange = Color3.fromRGB(234, 165, 16),
+    White = Color3.fromRGB(228, 217, 211),
+    Blue = Color3.fromRGB(16, 167, 234),
+}
+
+local Evidence = {
+    EMF = false,
+    UV = false,
+    SpiritBox = false,
+    Orb = false,
+    Freeze = false,
+    Inscript = false,
+    Laser = false,
+    Wither = false,
+    TypeSiren = false,
+}
+
+local SpiritBoxResponses = {
+    "CLOSE",
+    "FAR",
+    "FAR AWAY",
+    "AWAY",
+    "KILL",
+    "HATE",
+    "DON'T TURN AROUND",
+    "BEHIND",
+    "I'M BEHIND YOU",
+    "DEATH",
+    "ATTACK",
+    "HURT",
+    "YOUNG",
+    "OLD",
+    "ELDER"
+}
+
+-- Text handler
+
+local TextOffset = 0
+local TextYVal = 0
 local TextC = 0
 local Texts = {}
 local TextIds = {}
@@ -27,47 +63,41 @@ local test = Drawing.new("Text")
 test.Text = "XYZ"
 test.Size = 20
 test.Font = 0
-Offset = test.TextBounds.Y
-YVal = Camera.ViewportSize.Y - 25
+TextOffset = test.TextBounds.Y
+TextYVal = Camera.ViewportSize.Y - 25
 test:Remove()
 
 local function AddText(id, text, color)
-    if TextIds[id] then
-        print("Attempted to add text with a conflicting ID")
-        return
-    end
+    if TextIds[id] then return end
 
     TextC += 1
     TextIds[id] = TextC
-    YVal = YVal - Offset
+    TextYVal -= TextOffset
 
     Texts[id] = Drawing.new("Text")
     Texts[id].Text = text
     Texts[id].Size = 20
     Texts[id].Font = 0
-    Texts[id].Position = Vector2.new(25, YVal)
+    Texts[id].Position = Vector2.new(25, TextYVal)
     Texts[id].Color = color
     Texts[id].Visible = true
 end
 
 local function RemoveText(id)
-    if not TextIds[id] then
-        print("Attempted to remove unregistered text")
-        return
-    end
+    if not TextIds[id] then return end
 
     local Stack = TextIds[id]
-    local temp = YVal
+    local temp = TextYVal
 
     for i, inst in pairs(TextIds) do
         if not inst then continue end
         if inst <= Stack then continue end
         TextIds[i] = inst - 1
-        temp += Offset
+        temp += TextOffset
         Texts[i].Position = Vector2.new(25, temp)
     end
 
-    YVal += Offset
+    TextYVal += TextOffset
     TextC -= 1
     TextIds[id] = nil
     Texts[id]:Remove()
@@ -95,6 +125,8 @@ local Convex = {
         HWMPoly = 0
     }
 }
+
+-- Highlighter
 
 local function TruncateBuffer(Buffer, NewSize, HighWaterMark)
     for Index = NewSize + 1, HighWaterMark do
@@ -216,15 +248,15 @@ local function Highlight(inst, color)
     Convex.Static.HWMPoints = TruncateBuffer(Convex.Scratch.Points, PointCount, Convex.Static.HWMPoints)
     local Size = CalculateConvexHull(Convex.Scratch.Points, PointCount, Convex.Scratch.Hull)
     Convex.Static.HWMHull = TruncateBuffer(Convex.Scratch.Hull, Size, Convex.Static.HWMHull)
-    DrawPolygon(Convex.Scratch.Hull, Size, color, 0.1)
-    DrawOutline(Convex.Scratch.Hull, Size, color, 0.4, 0.4)
+    DrawPolygon(Convex.Scratch.Hull, Size, color, 0.2)
+    DrawOutline(Convex.Scratch.Hull, Size, color, 0.7, 0.7)
 end
 
 local function Render()
     if _G.Ghost_ESP then
         for i, inst in pairs(BodyParts) do
-            if workspace.Ghost:FindFirstChild(inst) then
-                Highlight(workspace.Ghost[inst], _G.Ghost_ESP_Color)
+            if Ghost:FindFirstChild(inst) then
+                Highlight(Ghost[inst], _G.Ghost_ESP_Color)
             end
         end
     end
@@ -236,99 +268,262 @@ local function Render()
     end
 end
 
-local Energy = tonumber(LocalPlayer:GetAttribute("Energy"))
-local EnergyText = "Your energy: " .. tostring(Energy)
-AddText("Energy", EnergyText, Color3.fromRGB(228, 217, 211))
-
-local FavRoomRaw = workspace.Ghost:GetAttribute("FavoriteRoom")
-local FavRoom = "Ghost's favorite room: " .. FavRoomRaw
-AddText("FavRoom", FavRoom, Color3.fromRGB(16, 167, 234))
-local FavRoomInst = workspace.Map.Rooms:FindFirstChild(FavRoomRaw)
-
-if workspace.Ghost:GetAttribute("Hunting") == "true" then
-    Hunting = true
-    AddText("Hunt", "Ghost is currently hunting", Color3.fromRGB(196, 45, 32))
+local SpeedBool = true
+local TextLabelBool = true
+local GhostSpeedColorBool = true
+local DefaultSpeed = tonumber(workspace:GetAttribute("DefaultWalkSpeed"))
+local MaxStamina = workspace:GetAttribute("MaxStamina")
+local LocalSpeed
+local GhostSpeed
+if tostring(_G.WalkspeedOffset) == "0" then
+    SpeedBool = false
+    LocalSpeed = -1
+    GhostSpeed = -1
 else
-    Hunting = false
-    AddText("Hunt", "Ghost is not hunting", Color3.fromRGB(16, 167, 234))
+    LocalSpeed = memory.readf32(LocalPlayer.Character.Humanoid, tonumber(_G.WalkspeedOffset, 16))
+    GhostSpeed = memory.readf32(Ghost.Humanoid, tonumber(_G.WalkspeedOffset, 16))
 end
 
-if workspace.Ghost:GetAttribute("Gender") == "Male" then
-    AddText("Gender", "Keres and Siren can be ruled out", Color3.fromRGB(228, 217, 211))
+local GhostSpeedText = "Ghost\'s speed: " .. tostring(GhostSpeed)
+local SirenSpeedDebuffs = {
+    math.floor((DefaultSpeed * 0.8) * 100) / 100,
+    math.floor((DefaultSpeed * 1.28) * 100) / 100,
+    math.floor((DefaultSpeed * 0.4) * 100) / 100
+}
+
+if GhostSpeed < 0 or GhostSpeed > 50 then
+    SpeedBool = false
+    TextLabelBool = false
+    print("Memory offsets outdated! Speed tracker and spirit box tracker is disabled.")
+elseif GhostSpeed ~= 11 then
+    GhostSpeedColorBool = false
+end
+
+if SpeedBool then
+    local GhostSpeedColor = Colors.White
+    AddText("GhostSpeed", GhostSpeedText, GhostSpeedColor)
+end
+
+if tostring(_G.TextLabelOffset) == "0" then
+    TextLabelBool = false
+end
+
+local Energy = tonumber(LocalPlayer:GetAttribute("Energy"))
+local EnergyText = "Your energy: " .. tostring(Energy)
+local EnergyColor = Colors.White
+
+if Energy == 0 then
+    EnergyColor = Colors.Red
+elseif Energy < 20 then
+    EnergyColor = Colors.Orange
+end
+
+AddText("Energy", EnergyText, EnergyColor)
+
+local FavRoomRaw = Ghost:GetAttribute("FavoriteRoom")
+local FavRoom = "Ghost's favorite room: " .. FavRoomRaw
+local FavRoomInst = Rooms:FindFirstChild(FavRoomRaw)
+
+AddText("FavRoom", FavRoom, Colors.Blue)
+
+local GhostHunting = false
+
+if Ghost:GetAttribute("Hunting") == "true" then
+    GhostHunting = true
+    AddText("Hunt", "Ghost is currently hunting", Colors.Red)
+else
+    AddText("Hunt", "Ghost is not hunting", Colors.Blue)
+end
+
+if Ghost:GetAttribute("Gender") == "Male" then
+    AddText("Gender", "Keres and Siren can be ruled out", Colors.White)
 end
 
 if workspace:FindFirstChild("GhostOrb") then
+    Evidence.Orb = true
     send_notification("Ghost Orb evidence found", "warning")
-    AddText("OrbEvidence", "Ghost orb evidence found", Color3.fromRGB(32, 196, 93))
+    AddText("OrbEvidence", "Ghost orb evidence found", Colors.Green)
 else
-    AddText("OrbEvidence", "No ghost orb evidence, can be ruled out", Color3.fromRGB(228, 217, 211))
+    AddText("OrbEvidence", "No ghost orb evidence, can be ruled out", Colors.White)
 end
 
-RunService.Render:Connect(Render)
+local function Main()
+    if not Ghost:FindFirstChild("Humanoid") then return end
+    if not LocalPlayer.Character then return end
+    if not LocalPlayer.Character:FindFirstChild("Humanoid") then return end
+    if not LocalPlayer:FindFirstChild("PlayerGui") then return end
+    if not LocalPlayer.PlayerGui:FindFirstChild("Subtitles") then return end
+    if not LocalPlayer.PlayerGui.Subtitles:FindFirstChild("Holder") then return end
+    if not LocalPlayer.PlayerGui.Subtitles.Holder:FindFirstChild("TextLabel") then return end
 
-RunService.PostLocal:Connect(function()
-    if tonumber(LocalPlayer:GetAttribute("Energy")) ~= Energy then
-        Energy = tonumber(LocalPlayer:GetAttribute("Energy"))
+    local EnergyAttribute = tonumber(LocalPlayer:GetAttribute("Energy"))
+    local FavRoomAttribute = Ghost:GetAttribute("FavoriteRoom")
+    local HuntingAttribute = Ghost:GetAttribute("Hunting") == "true"
+    local LaserAttribute = Ghost:GetAttribute("LaserVisible") == "true"
+    local Temperature = tonumber(FavRoomInst:GetAttribute("Temperature"))
+    local HandprintInst = workspace.Handprints:FindFirstChildOfClass("Part")
+    local InscriptInst = workspace.ScratchText:FindFirstChildOfClass("Model")
+    local Subtitle = LocalPlayer.PlayerGui.Subtitles.Holder.TextLabel
+
+    if SpeedBool then
+        local NewGhostSpeed = memory.readf32(Ghost.Humanoid, tonumber(_G.WalkspeedOffset, 16))
+        if GhostSpeed ~= NewGhostSpeed then
+            GhostSpeed = NewGhostSpeed
+            if GhostSpeed == 11 and GhostSpeedColorBool then
+                Texts["GhostSpeed"].Color = Colors.White
+            elseif GhostSpeedColorBool then
+                Texts["GhostSpeed"].Color = Colors.Orange
+            end
+            GhostSpeedText = "Ghost\'s speed: " .. tostring(GhostSpeed)
+            Texts["GhostSpeed"].Text = GhostSpeedText
+        end
+        LocalSpeed = memory.readf32(LocalPlayer.Character.Humanoid, tonumber(_G.WalkspeedOffset, 16))
+    end
+
+    if TextLabelBool then
+        local SubtitleText = memory.readstring(Subtitle, tonumber(_G.TextLabelTextOffset, 16))
+        if SubtitleText == "- HUMMING -" and not Evidence.TypeSiren then
+            if not Evidence.SpiritBox then
+                Evidence.SpiritBox = true
+                send_notification("Spirit box evidence found", "warning")
+                AddText("SpiritBoxEvidence", "Spirit box evidence found", Colors.Green)
+            end
+            
+            Evidence.TypeSiren = true
+            send_notification("Ghost type found: Siren", "warning")
+            AddText("SirenType", "Ghost type found: Siren", Colors.Red)
+        end
+
+        for i, inst in pairs(SpiritBoxResponses) do
+            if SubtitleText == inst and not Evidence.SpiritBox then
+                Evidence.SpiritBox = true
+                send_notification("Spirit box evidence found", "warning")
+                AddText("SpiritBoxEvidence", "Spirit box evidence found", Colors.Green)
+            end
+        end
+    end
+
+    if EnergyAttribute ~= Energy then
+        Energy = EnergyAttribute
         EnergyText = "Your energy: " .. tostring(Energy)
         Texts["Energy"].Text = EnergyText
         if Energy == 0 then
-            Texts["Energy"].Color = Color3.fromRGB(196, 45, 32)
+            Texts["Energy"].Color = Colors.Red
         elseif Energy < 20 then
-            if Texts["Energy"].Color ~= Color3.fromRGB(234, 165, 16) then
-                Texts["Energy"].Color = Color3.fromRGB(234, 165, 16)
+            if Texts["Energy"].Color ~= Colors.Orange then
+                Texts["Energy"].Color = Colors.Orange
             end
         end
     end
 
     if _G.Inf_Stamina then
-        LocalPlayer:SetAttribute("Stamina", 100)
+        LocalPlayer:SetAttribute("Stamina", MaxStamina)
     end
 
-    if workspace.Ghost:GetAttribute("FavoriteRoom") ~= FavRoomRaw then
+    if FavRoomAttribute ~= FavRoomRaw then
         send_notification("Ghost\'s favorite room changed", "warning")
-        FavRoomRaw = workspace.Ghost:GetAttribute("FavoriteRoom")
+        FavRoomRaw = FavRoomAttribute
         FavRoom = "Ghost's favorite room: " .. FavRoomRaw
-        FavRoomInst = workspace.Map.Rooms:FindFirstChild(FavRoomRaw)
+        FavRoomInst = Rooms:FindFirstChild(FavRoomRaw)
         Texts["FavRoom"].Text = FavRoom
     end
 
-    if workspace.Ghost:GetAttribute("Hunting") == "true" and not Hunting then
-        Hunting = true
+    if HuntingAttribute and not GhostHunting then
+        GhostHunting = true
         send_notification("Ghost started hunting", "error")
         Texts["Hunt"].Text = "Ghost is currently hunting"
-        Texts["Hunt"].Color = Color3.fromRGB(196, 45, 32)
-    elseif workspace.Ghost:GetAttribute("Hunting") == "false" and Hunting then
-        Hunting = false
+        Texts["Hunt"].Color = Colors.Red
+    elseif not HuntingAttribute and GhostHunting then
+        GhostHunting = false
         send_notification("Ghost stopped hunting", "info")
         Texts["Hunt"].Text = "Ghost is not hunting"
-        Texts["Hunt"].Color = Color3.fromRGB(16, 167, 234)
+        Texts["Hunt"].Color = Colors.Blue
     end
 
-    if workspace.Handprints:FindFirstChildOfClass("Part") and not UVEvidence then
-        UVEvidence = true
-        send_notification("UV Handprints evidence found", "warning")
-        AddText("UVEvidence", "UV Handprints evidence found", Color3.fromRGB(32, 196, 93))
+    if HandprintInst and not Evidence.UV then
+        Evidence.UV = true
+        send_notification("UV handprints evidence found", "warning")
+        AddText("UVEvidence", "UV handprints evidence found", Colors.Green)
     end
 
-    if workspace.ScratchText:FindFirstChildOfClass("Model") and not WriteEvidence then
-        WriteEvidence = true
+    if InscriptInst and not Evidence.Inscript then
+        Evidence.Inscript = true
         send_notification("Inscription evidence found", "warning")
-        AddText("WriteEvidence", "Inscription evidence found", Color3.fromRGB(32, 196, 93))
+        AddText("WriteEvidence", "Inscription evidence found", Colors.Green)
     end
 
-    if workspace.Ghost:GetAttribute("LaserVisible") == "true" and not LaserEvidence then
-        LaserEvidence = true
+    if LaserAttribute and not Evidence.Laser then
+        Evidence.Laser = true
         send_notification("Laser projector evidence found", "warning")
-        AddText("LaserEvidence", "Laser projector evidence found", Color3.fromRGB(32, 196, 93))
+        AddText("LaserEvidence", "Laser projector evidence found", Colors.Green)
     end
 
-    if tonumber(FavRoomInst:GetAttribute("Temperature")) < 0 then
-        if not FreezeEvidence then
-            FreezeEvidence = true
-            send_notification("Freezing temperature evidence found", "warning")
-            AddText("FreezeEvidence", "Freezing temperature evidence found", Color3.fromRGB(32, 196, 93))
+    if Temperature < 0 and not Evidence.Freeze then
+        Evidence.Freeze = true
+        send_notification("Freezing temperature evidence found", "warning")
+        AddText("FreezeEvidence", "Freezing temperature evidence found", Colors.Green)
+    end
+
+    for i, inst in pairs(workspace.Items:GetChildren()) do
+        local ItemName = inst:GetAttribute("ItemName")
+        local RewardBool = inst:GetAttribute("PhotoRewardAvailable") == "true"
+        local ReadingLevel = inst:GetAttribute("ReadingLevel") or 1
+        local RewardType = inst:GetAttribute("PhotoRewardType") or "Nil"
+
+        if ItemName == "Spirit Book" and RewardBool and RewardType == "Inscription" and not Evidence.Inscript then
+            Evidence.Inscript = true
+            send_notification("Inscription evidence found", "warning")
+            AddText("InscriptEvidence", "Inscription evidence found", Colors.Green)
+        end
+
+        if ItemName == "Flower Pot" and RewardBool and RewardType == "WitheredFlowers" and not Evidence.Wither then
+            Evidence.Wither = true
+            send_notification("Wither evidence found", "warning")
+            AddText("WitherEvidence", "Wither evidence found", Colors.Green)
+        end
+
+        if ItemName == "EMF Reader" and tonumber(ReadingLevel) > 4.5 and not Evidence.EMF then
+            Evidence.EMF = true
+            send_notification("EMF level 5 evidence found", "warning")
+            AddText("EMFEvidence", "EMF level 5 evidence found", Colors.Green)
         end
     end
-end)
+
+    for i, inst in pairs(Players:GetChildren()) do
+        if not inst.Character then continue end
+        local Humanoid = inst.Character:FindFirstChild("Humanoid")
+        if not Humanoid then continue end
+
+        if SpeedBool and not Evidence.TypeSiren then
+            for j, val in pairs(SirenSpeedDebuffs) do
+                if LocalSpeed == val then
+                    Evidence.TypeSiren = true
+                    send_notification("Ghost type found: Siren", "warning")
+                    AddText("SirenType", "Ghost type found: Siren", Colors.Red)
+                end
+            end
+        end
+
+        for j, part in pairs(inst.Character:GetChildren()) do
+            if part:GetAttribute("ItemName") == "EMF Reader" then
+                if not part:GetAttribute("ReadingLevel") then continue end
+                if tonumber(part:GetAttribute("ReadingLevel")) > 4.5 and not Evidence.EMF then
+                    Evidence.EMF = true
+                    send_notification("EMF level 5 evidence found", "warning")
+                    AddText("EMFEvidence", "EMF level 5 evidence found", Colors.Green)
+                end
+            end
+        end
+    end
+end
+
+-- Initialization
 
 print("Script Started")
+
+RunService.Render:Connect(Render)
+RunService.PostLocal:Connect(Main)
+
+else
+    print("Wrong game")
+end
