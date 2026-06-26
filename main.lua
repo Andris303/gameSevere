@@ -11,8 +11,6 @@ local Ghost = workspace.Ghost
 local Rooms = workspace.Map.Rooms
 local ScriptRestart = false
 
--- 5, 10, 16
-
 local Colors = {
     Green = Color3.fromRGB(32, 196, 93),
     Red = Color3.fromRGB(196, 45, 32),
@@ -361,6 +359,7 @@ local function Main()
     local FavRoomAttribute = Ghost:GetAttribute("FavoriteRoom")
     local HuntingAttribute = Ghost:GetAttribute("Hunting") == "true"
     local LaserAttribute = Ghost:GetAttribute("LaserVisible") == "true"
+    local EMFAttribute = Ghost:GetAttribute("LastEMFLevel5Time")
     local HandprintInst = workspace.Handprints:FindFirstChildOfClass("Part")
     local InscriptInst = workspace.ScratchText:FindFirstChildOfClass("Model")
     local Subtitle = LocalPlayer.PlayerGui.Subtitles.Holder.TextLabel
@@ -466,6 +465,12 @@ local function Main()
         AddText("LaserEvidence", "Laser projector evidence found", Colors.Green)
     end
 
+    if EMFAttribute and not Evidence.EMF then
+        Evidence.EMF = true
+        send_notification("EMF level 5 evidence found", "warning")
+        AddText("EMFEvidence", "EMF level 5 evidence found", Colors.Green)
+    end
+
     for i, inst in pairs(Rooms:GetChildren()) do
         RoomTemp = tonumber(inst:GetAttribute("Temperature"))
         if RoomTemp < 0 and not Evidence.Freeze then
@@ -492,12 +497,6 @@ local function Main()
             send_notification("Wither evidence found", "warning")
             AddText("WitherEvidence", "Wither evidence found", Colors.Green)
         end
-
-        if ItemName == "EMF Reader" and tonumber(ReadingLevel) > 4.5 and not Evidence.EMF then
-            Evidence.EMF = true
-            send_notification("EMF level 5 evidence found", "warning")
-            AddText("EMFEvidence", "EMF level 5 evidence found", Colors.Green)
-        end
     end
 
     for i, inst in pairs(Players:GetChildren()) do
@@ -511,17 +510,6 @@ local function Main()
                     Evidence.TypeSiren = true
                     send_notification("Ghost type found: Siren", "warning")
                     AddText("SirenType", "Ghost type found: Siren", Colors.Red)
-                end
-            end
-        end
-
-        for j, part in pairs(inst.Character:GetChildren()) do
-            if part:GetAttribute("ItemName") == "EMF Reader" then
-                if not part:GetAttribute("ReadingLevel") then continue end
-                if tonumber(part:GetAttribute("ReadingLevel")) > 4.5 and not Evidence.EMF then
-                    Evidence.EMF = true
-                    send_notification("EMF level 5 evidence found", "warning")
-                    AddText("EMFEvidence", "EMF level 5 evidence found", Colors.Green)
                 end
             end
         end
