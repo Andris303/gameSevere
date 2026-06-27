@@ -10,6 +10,8 @@ local LocalPlayer = Players.LocalPlayer
 local Ghost = workspace.Ghost
 local Rooms = workspace.Map.Rooms
 local ScriptRestart = false
+local SkinwalkerPartiallyFound = false
+local TestMode = false -- do not enable, might cause bugs
 
 local Colors = {
     Green = Color3.fromRGB(32, 196, 93),
@@ -28,8 +30,37 @@ local Evidence = {
     Inscript = false,
     Laser = false,
     Wither = false,
+    TypeFound = false,
     TypeSiren = false,
     TypeBanshee = false
+}
+
+local GhostCodes = {
+    EMFInscriptWither = "Aswang",
+    UVOrbFreeze = "Banshee",
+    EMFUVFreeze = "Demon",
+    FreezeLaserWither = "Dullahan",
+    UVFreezeWither = "Dybbuk",
+    UVSpiritBoxLaser = "Entity",
+    SpiritBoxOrbFreeze = "Ghoul",
+    UVSpiritBoxWither = "Keres",
+    UVOrbInscript = "Leviathan",
+    EMFSpiritBoxOrb = "Nightmare",
+    SpiritBoxFreezeLaser = "Oni",
+    EMFUVOrb = "Phantom",
+    EMFSpiritBoxInscript = "Ravager",
+    EMFFreezeInscript = "Revenant",
+    EMFInscriptLaser = "Shadow",
+    EMFSpiritBoxWither = "Siren",
+    SpiritBoxFreezeInscript = "Skinwalker",
+    EMFFreezeLaser = "Specter",
+    UVSpiritBoxInscript = "Spirit",
+    UVOrbLaser = "Umbra",
+    UVInscriptWither = "Vesper",
+    OrbFreezeWither = "Vex",
+    OrbInscriptLaser = "Wendigo",
+    OrbLaserWither = "The Wisp",
+    EMFSpiritBoxLaser = "Wraith"
 }
 
 local SpiritBoxResponses = {
@@ -269,11 +300,12 @@ end
 
 local SpeedBool = true
 local TextLabelBool = true
-local GhostSpeedColorBool = true
 local DefaultSpeed = tonumber(workspace:GetAttribute("DefaultWalkSpeed"))
 local MaxStamina = workspace:GetAttribute("MaxStamina")
+local CustomDif = workspace:GetAttribute("Difficulty") == "Custom"
 local LocalSpeed
 local GhostSpeed
+
 if tostring(_G.WalkspeedOffset) == "0" then
     SpeedBool = false
     LocalSpeed = -1
@@ -283,7 +315,7 @@ else
     GhostSpeed = memory.readf32(Ghost.Humanoid, tonumber(_G.WalkspeedOffset, 16))
 end
 
-local GhostSpeedText = "Ghost\'s speed: " .. tostring(GhostSpeed)
+local GhostSpeedText = "Ghost\'s speed: " .. tostring(math.floor(GhostSpeed * 100) / 100)
 local SirenSpeedDebuffs = {
     math.floor((DefaultSpeed * 0.8) * 100) / 100,
     math.floor((DefaultSpeed * 1.28) * 100) / 100,
@@ -292,14 +324,16 @@ local SirenSpeedDebuffs = {
 
 if GhostSpeed < 0 or GhostSpeed > 50 then
     SpeedBool = false
-    TextLabelBool = false
     print("Memory offsets outdated! Speed tracker and spirit box tracker is disabled.")
-elseif GhostSpeed ~= 11 then
-    GhostSpeedColorBool = false
 end
 
 if SpeedBool then
     local GhostSpeedColor = Colors.White
+    if not CustomDif or TestMode then
+        if math.floor(GhostSpeed * 100) / 100 ~= 11 then
+            GhostSpeedColor = Colors.Orange
+        end
+    end
     AddText("GhostSpeed", GhostSpeedText, GhostSpeedColor)
 end
 
@@ -346,6 +380,31 @@ else
     AddText("OrbEvidence", "No ghost orb evidence, can be ruled out", Colors.White)
 end
 
+local function ShowType(ghost)
+    if Evidence.TypeFound then return end
+    if SkinwalkerPartiallyFound then RemoveText("GhostFoundPartial") end
+    Evidence.TypeFound = true
+    local OutputText = "Ghost type found: " .. ghost
+    send_notification(OutputText, "warning")
+    AddText("GhostFound", OutputText, Colors.Red)
+end
+
+local function ShowEvidence(textshort, text)
+    if Evidence[textshort] then return end
+    Evidence[textshort] = true
+    local OutputText = text .. " evidence found"
+    send_notification(OutputText, "warning")
+    AddText(textshort, OutputText, Colors.Green)
+end
+
+if Ghost:GetAttribute("Headless") then
+    ShowType("Dullahan")
+end
+
+if not Ghost:FindFirstChild("GhostFootsteps") then
+    ShowType("Umbra")
+end
+
 local function Main()
     if not Ghost:FindFirstChild("Humanoid") then return end
     if not LocalPlayer.Character then return end
@@ -368,45 +427,48 @@ local function Main()
         local NewGhostSpeed = memory.readf32(Ghost.Humanoid, tonumber(_G.WalkspeedOffset, 16))
         if GhostSpeed ~= NewGhostSpeed then
             GhostSpeed = NewGhostSpeed
-            if GhostSpeed == 11 and GhostSpeedColorBool then
-                Texts["GhostSpeed"].Color = Colors.White
-            elseif GhostSpeedColorBool then
-                Texts["GhostSpeed"].Color = Colors.Orange
+            local TruncatedSpeed = math.floor(GhostSpeed * 100) / 100
+            if not CustomDif or TestMode then
+                if GhostSpeed == 11 then
+                    Texts["GhostSpeed"].Color = Colors.White
+                else
+                    Texts["GhostSpeed"].Color = Colors.Orange
+                end
+                if TruncatedSpeed == 8.25 then
+                    ShowType("Aswang")
+                elseif TruncatedSpeed == 8.8 then
+                    ShowType("Umbra")
+                elseif TruncatedSpeed == 13.5 and not Evidence.TypeFound then
+                    if Evidence.Orb then
+                        ShowType("Phantom")
+                    else
+                        ShowType("Oni")
+                    end
+                elseif TruncatedSpeed ~= 3 and TruncatedSpeed ~= 8.25 and TruncatedSpeed ~= 8.8 and TruncatedSpeed ~= 11 and TruncatedSpeed ~= 13.5 then
+                    ShowType("Wendigo")
+                end
             end
-            GhostSpeedText = "Ghost\'s speed: " .. tostring(math.floor(GhostSpeed * 100) / 100)
+            GhostSpeedText = "Ghost\'s speed: " .. tostring(TruncatedSpeed)
             Texts["GhostSpeed"].Text = GhostSpeedText
         end
-        LocalSpeed = memory.readf32(LocalPlayer.Character.Humanoid, tonumber(_G.WalkspeedOffset, 16))
+        LocalSpeed = math.floor(memory.readf32(LocalPlayer.Character.Humanoid, tonumber(_G.WalkspeedOffset, 16)) * 100) / 100
     end
 
     if TextLabelBool then
         local SubtitleText = memory.readstring(Subtitle, tonumber(_G.TextLabelTextOffset, 16))
-        if SubtitleText == "- HUMMING -" then
-            if not Evidence.SpiritBox then
-                Evidence.SpiritBox = true
-                send_notification("Spirit box evidence found", "warning")
-                AddText("SpiritBoxEvidence", "Spirit box evidence found", Colors.Green)
-            end
-            
-            if not Evidence.TypeSiren then
-                Evidence.TypeSiren = true
-                send_notification("Ghost type found: Siren", "warning")
-                AddText("SirenType", "Ghost type found: Siren", Colors.Red)
-            end
-        end
-
-        if SubtitleText == "> Ghost Wail <" and GhostHunting and not Evidence.TypeBanshee then
-            Evidence.TypeBanshee = true
-            send_notification("Ghost type found: Banshee", "warning")
-            AddText("SirenType", "Ghost type found: Banshee", Colors.Red)
-        end
 
         for i, inst in pairs(SpiritBoxResponses) do
-            if SubtitleText == inst and not Evidence.SpiritBox then
-                Evidence.SpiritBox = true
-                send_notification("Spirit box evidence found", "warning")
-                AddText("SpiritBoxEvidence", "Spirit box evidence found", Colors.Green)
+            if SubtitleText == inst then
+                ShowEvidence("SpiritBox", "Spirit Box")
             end
+        end
+
+        if SubtitleText == "- HUMMING -" then
+            ShowType("Siren")
+        end
+
+        if SubtitleText == "> Ghost Wail <" and GhostHunting then
+            ShowType("Banshee")
         end
     end
 
@@ -419,6 +481,10 @@ local function Main()
         elseif Energy < 20 then
             if Texts["Energy"].Color ~= Colors.Orange then
                 Texts["Energy"].Color = Colors.Orange
+            end
+        else
+            if Texts["Energy"].Color ~= Colors.White then
+                Texts["Energy"].Color = Colors.White
             end
         end
     end
@@ -437,47 +503,22 @@ local function Main()
 
     if HuntingAttribute and not GhostHunting then
         GhostHunting = true
-        send_notification("Ghost started hunting", "error")
         Texts["Hunt"].Text = "Ghost is currently hunting"
         Texts["Hunt"].Color = Colors.Red
     elseif not HuntingAttribute and GhostHunting then
         GhostHunting = false
-        send_notification("Ghost stopped hunting", "info")
         Texts["Hunt"].Text = "Ghost is not hunting"
         Texts["Hunt"].Color = Colors.Blue
     end
 
-    if HandprintInst and not Evidence.UV then
-        Evidence.UV = true
-        send_notification("UV handprints evidence found", "warning")
-        AddText("UVEvidence", "UV handprints evidence found", Colors.Green)
-    end
-
-    if InscriptInst and not Evidence.Inscript then
-        Evidence.Inscript = true
-        send_notification("Inscription evidence found", "warning")
-        AddText("WriteEvidence", "Inscription evidence found", Colors.Green)
-    end
-
-    if LaserAttribute and not Evidence.Laser then
-        Evidence.Laser = true
-        send_notification("Laser projector evidence found", "warning")
-        AddText("LaserEvidence", "Laser projector evidence found", Colors.Green)
-    end
-
-    if EMFAttribute and not Evidence.EMF then
-        Evidence.EMF = true
-        send_notification("EMF level 5 evidence found", "warning")
-        AddText("EMFEvidence", "EMF level 5 evidence found", Colors.Green)
-    end
+    if HandprintInst then ShowEvidence("UV", "UV handprints") end
+    if InscriptInst then ShowEvidence("Inscript", "Inscription") end
+    if LaserAttribute then ShowEvidence("Laser", "Laser projector") end
+    if EMFAttribute then ShowEvidence("EMF", "EMF level 5") end
 
     for i, inst in pairs(Rooms:GetChildren()) do
-        RoomTemp = tonumber(inst:GetAttribute("Temperature"))
-        if RoomTemp < 0 and not Evidence.Freeze then
-            Evidence.Freeze = true
-            send_notification("Freezing temperatures evidence found", "warning")
-            AddText("FreezeEvidence", "Freezing temperatures evidence found", Colors.Green)
-        end
+        local RoomTemp = tonumber(inst:GetAttribute("Temperature"))
+        if RoomTemp < 0 then ShowEvidence("Freeze", "Freezing temperatures") end
     end
 
     for i, inst in pairs(workspace.Items:GetChildren()) do
@@ -486,16 +527,12 @@ local function Main()
         local ReadingLevel = inst:GetAttribute("ReadingLevel") or 1
         local RewardType = inst:GetAttribute("PhotoRewardType") or "Nil"
 
-        if ItemName == "Spirit Book" and RewardBool and RewardType == "Inscription" and not Evidence.Inscript then
-            Evidence.Inscript = true
-            send_notification("Inscription evidence found", "warning")
-            AddText("InscriptEvidence", "Inscription evidence found", Colors.Green)
+        if ItemName == "Spirit Book" and RewardBool and RewardType == "Inscription" then
+            ShowEvidence("Inscript", "Inscription")
         end
 
-        if ItemName == "Flower Pot" and RewardBool and RewardType == "WitheredFlowers" and not Evidence.Wither then
-            Evidence.Wither = true
-            send_notification("Wither evidence found", "warning")
-            AddText("WitherEvidence", "Wither evidence found", Colors.Green)
+        if ItemName == "Flower Pot" and RewardBool and RewardType == "WitheredFlowers" then
+            ShowEvidence("Wither", "Wither")
         end
     end
 
@@ -504,15 +541,50 @@ local function Main()
         local Humanoid = inst.Character:FindFirstChild("Humanoid")
         if not Humanoid then continue end
 
-        if SpeedBool and not Evidence.TypeSiren then
+        if SpeedBool and not Evidence.TypeFound then
             for j, val in pairs(SirenSpeedDebuffs) do
                 if LocalSpeed == val then
-                    Evidence.TypeSiren = true
-                    send_notification("Ghost type found: Siren", "warning")
-                    AddText("SirenType", "Ghost type found: Siren", Colors.Red)
+                    ShowType("Siren")
                 end
             end
         end
+    end
+
+    if Evidence.TypeFound then return end
+
+    local c = 0
+    local code = ""
+
+    local function AddCode(string)
+        c += 1
+        code = code .. string
+    end
+
+    if Evidence.EMF then AddCode("EMF") end
+    if Evidence.UV then AddCode("UV") end
+    if Evidence.SpiritBox then AddCode("SpiritBox") end
+    if Evidence.Orb then AddCode("Orb") end
+    if Evidence.Freeze then AddCode("Freeze") end
+    if Evidence.Inscript then AddCode("Inscript") end
+    if Evidence.Laser then AddCode("Laser") end
+    if Evidence.Wither then AddCode("Wither") end
+
+    if c == 3 then
+        if not SkinwalkerPartiallyFound then
+            if code == "OrbFreezeInscript" or code == "SpiritBoxOrbInscript" then
+                ShowType("Skinwalker")
+            elseif code == "SpiritBoxOrbFreeze" then
+                SkinwalkerPartiallyFound = true
+                send_notification("Ghost type found: Ghoul", "warning")
+                AddText("GhostFoundPartial", "Ghost type found: Ghoul, WARNING: Possibly Skinwalker, try ruling out inscription", Colors.Red)
+            end
+
+            if GhostCodes[code] then
+                ShowType(GhostCodes[code])
+            end
+        end
+    elseif c == 4 then
+        ShowType("Skinwalker")
     end
 end
 
